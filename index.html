@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETL Exercise</title>
+    <style>
+        {
+            box-sizing: border-box;
+        }
+
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f6fa;
+            color: #222;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+
+        .header h1 {
+            margin-bottom: 8px;
+        }
+
+
+        .header p {
+            color: #666;
+            margin: 5px 0;
+        }
+
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+
+        .card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 25px;
+            min-width: 0;
+        }
+
+
+        .card h2 {
+            font-size: 20px;
+            margin-top: 0;
+        }
+
+
+        .description {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+
+        .file-group {
+            margin-bottom: 20px;
+        }
+
+
+        .file-group label {
+            display: block;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 13px 22px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+
+        button:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+        }
+
+
+        #status {
+            margin-top: 15px;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+
+        .output-card {
+            display: flex;
+            flex-direction: column;
+        }
+
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            overflow: auto;
+            flex: 1;
+            min-height: 350px;
+            max-height: 600px;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            margin-bottom: 0;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <h1>Gabrielle Chua</h1>
+        <p><i>IT 3206N 12:30 - 3:00</i></p>
+        <h1>ETL Exercise</h1>
+    </div>
+
+    <div class="content">
+
+        <div class="card">
+            <h2>1. Upload Source CSV Files</h2>
+            <p class="description">
+                Upload the three CSV files to extract and integrate student records.
+            </p>
+
+            <div class="file-group">
+                <label for="sisFile">
+                    Student Information System (SIS)
+                </label>
+                <input type="file" id="sisFile" accept=".csv,text/csv">
+            </div>
+
+            <div class="file-group">
+                <label for="lmsFile">
+                    Learning Management System (LMS)
+                </label>
+                <input type="file" id="lmsFile" accept=".csv,text/csv">
+            </div>
+
+            <div class="file-group">
+                <label for="accountingFile">
+                    Accounting System
+                </label>
+                <input type="file" id="accountingFile" accept=".csv,text/csv">
+            </div>
+
+            <button id="runButton" onclick="runETL()">
+                Run ETL
+            </button>
+
+            <p id="status">
+                Upload the three CSV files and click Run ETL.
+            </p>
+        </div>
+
+        <div class="card output-card">
+            <h2>2. Integrated JSON Output</h2>
+            <pre id="jsonOutput">Your JSON output will appear here.</pre>
+        </div>
+
+    </div>
+
+</div>
+
+        <script>
+            function parseCSV(text) {
+                const rows = [];
+                let row = [];
+                let value = "";
+                let quoted = false;
+
+                text = text.replace(/^\uFEFF/, "");
+
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+
+                    if (ch === '"') {
+                        if (quoted && text[i + 1] === '"') {
+                            value += '"';
+                            i++;
+                        } else {
+                            quoted = !quoted;
+                        }
+                    } else if (ch === "," && !quoted) {
+                        row.push(value);
+                        value = "";
+                    } else if ((ch === "\n" || ch === "\r") && !quoted) {
+                        if (ch === "\r" && text[i + 1] === "\n") {
+                            i++;
+                        }
+
+                        row.push(value);
+
+                        if (row.some(v => v.trim() !== "")) {
+                            rows.push(row);
+                        }
+
+                        row = [];
+                        value = "";
+                    } else {
+                        value += ch;
+                    }
+                }
+
+                if (quoted) {
+                    throw new Error("CSV contains an unclosed quoted value.");
+                }
+
+                row.push(value);
+
+                if (row.some(v => v.trim() !== "")) {
+                    rows.push(row);
+                }
+
+                if (rows.length < 2) {
+                    throw new Error(
+                        "Each CSV must contain a header and at least one data row."
+                    );
+                }
+
+                const headers = rows[0].map(h => h.trim());
+
+                return rows.slice(1).map(values => {
+                    const record = {};
+
+                    headers.forEach((header, i) => {
+                        record[header] = (values[i] ?? "").trim();
+                    });
+
+                    return record;
+                });
+            }
+
+            function properCase(value) {
+                return String(value ?? "")
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\b[a-z]/g, letter => letter.toUpperCase());
+            }
+
+            async function readCSV(inputId, label) {
+                const file = document.getElementById(inputId).files[0];
+
+                if (!file) {
+                    throw new Error("Please select the " + label + " CSV file.");
+                }
+
+                return parseCSV(await file.text());
+            }
+
+            async function runETL() {
+                const button = document.getElementById("runButton");
+                const status = document.getElementById("status");
+                const output = document.getElementById("jsonOutput");
+
+                button.disabled = true;
+                status.style.color = "#666";
+                status.textContent = "Reading files and running ETL...";
+                output.textContent = "Processing...";
+
+                try {
+                    const [sis, lms, accounting] = await Promise.all([
+                        readCSV("sisFile", "SIS"),
+                        readCSV("lmsFile", "LMS"),
+                        readCSV("accountingFile", "Accounting")
+                    ]);
+
+                    const programMap = {
+                        BSIT: "Bachelor of Science in Information Technology",
+                        BSCS: "Bachelor of Science in Computer Science",
+                        BSIS: "Bachelor of Science in Information Systems"
+                    };
+
+                    const lmsById = new Map();
+                    const accountingById = new Map();
+
+                    lms.forEach(record => {
+                        const id = String(record.student_id ?? "").trim();
+
+                        if (!lmsById.has(id)) {
+                            lmsById.set(id, record);
+                        }
+                    });
+
+                    accounting.forEach(record => {
+                        const id = String(record.student_id ?? "").trim();
+
+                        if (!accountingById.has(id)) {
+                            accountingById.set(id, record);
+                        }
+                    });
+
+                    const integratedStudents = sis.map((student, index) => {
+                        const idText = String(student.student_id ?? "").trim();
+                        const studentId = Number(idText);
+                        const programCode = String(
+                            student.program_code ?? ""
+                        ).trim().toUpperCase();
+
+                        if (
+                            !/^\d+$/.test(idText) ||
+                            !Number.isSafeInteger(studentId)
+                        ) {
+                            throw new Error(
+                                "Invalid student_id in SIS row " + (index + 2)
+                            );
+                        }
+
+                        if (!programMap[programCode]) {
+                            throw new Error(
+                                "Unknown program code '" + programCode +
+                                "' in SIS row " + (index + 2)
+                            );
+                        }
+
+                        const lmsRecord = lmsById.get(idText);
+                        const accountingRecord = accountingById.get(idText);
+
+                        let finalGrade = null;
+
+                        if (
+                            lmsRecord &&
+                            String(lmsRecord.final_grade ?? "").trim() !== ""
+                        ) {
+                            const rawGrade = String(
+                                lmsRecord.final_grade
+                            ).trim();
+
+                            finalGrade = Number.isFinite(Number(rawGrade))
+                                ? Number(rawGrade)
+                                : rawGrade.toUpperCase();
+                        }
+
+                        let outstandingBalance = null;
+
+                        if (
+                            accountingRecord &&
+                            String(
+                                accountingRecord.account_balance ?? ""
+                            ).trim() !== ""
+                        ) {
+                            outstandingBalance = Number(
+                                String(accountingRecord.account_balance).trim()
+                            );
+
+                            if (!Number.isFinite(outstandingBalance)) {
+                                throw new Error(
+                                    "Invalid account balance for student " + idText
+                                );
+                            }
+                        }
+
+                        return {
+                            studentId: studentId,
+                            studentName: properCase(student.student_name),
+                            program: programMap[programCode],
+                            emailAddress: String(
+                                student.email ?? ""
+                            ).trim().toLowerCase(),
+
+                            lms: lmsRecord ? {
+                                courseCode: String(
+                                    lmsRecord.course_code ?? ""
+                                ).trim().toUpperCase(),
+                                finalGrade: finalGrade,
+                                completionStatus: properCase(
+                                    lmsRecord.completion_status
+                                )
+                            } : null,
+
+                            accounting: accountingRecord ? {
+                                outstandingBalance: outstandingBalance,
+                                currency: String(
+                                    accountingRecord.currency ?? ""
+                                ).trim().toUpperCase()
+                            } : null
+                        };
+                    });
+
+                    output.textContent = JSON.stringify(
+                        integratedStudents,
+                        null,
+                        4
+                    );
+
+                    status.textContent =
+                        "ETL completed successfully. " +
+                        integratedStudents.length +
+                        " student records processed.";
+
+                    status.style.color = "#16a34a";
+
+                } catch (error) {
+                    status.textContent = error.message;
+                    status.style.color = "#b91c1c";
+                    output.textContent = "Unable to generate JSON output.";
+                } finally {
+                    button.disabled = false;
+                }
+            }
+        </script>
+
+    </body>
+</html>
